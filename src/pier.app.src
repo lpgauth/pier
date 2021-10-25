@@ -1,0 +1,11 @@
+{application, pier, [
+  {applications, [kernel, stdlib, shackle]},
+  {description, "High-Performance Erlang Redis Client"},
+  {env, []},
+  {licenses, ["MIT"]},
+  {links, [{"GitHub", "https://github.com/lpgauth/pier"}]},
+  {maintainers, ["Louis-Philippe Gauthier"]},
+  {mod, {pier_app, []}},
+  {registered, []},
+  {vsn, "0.1.0"}
+]}.
