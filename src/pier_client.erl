@@ -14,8 +14,9 @@
 ]).
 
 -record(state, {
-    buffer   = <<>>      :: binary(),
-    requests = 0         :: non_neg_integer()
+    buffer       = <<>> :: binary(),
+    requests_in  = 0    :: non_neg_integer(),
+    requests_out = 0    :: non_neg_integer()
 }).
 
 -type state() :: #state {}.
@@ -36,27 +37,36 @@ setup(_Socket, State) ->
 -spec handle_request(term(), state()) ->
     {ok, pos_integer(), binary(), state()}.
 
-handle_request(_Request, #state {
-        requests = Requests
+handle_request(Request, #state {
+        requests_out = RequestsOut
     } = State) ->
 
-    RequestId = request_id(Requests),
-
-    {ok, RequestId, <<>>, State#state {
-        requests = Requests + 1
+    {ok, RequestsOut + 1, Request, State#state {
+        requests_out = RequestsOut + 1
     }}.
 
 -spec handle_data(binary(), state()) ->
     {ok, [{pos_integer(), term()}], state()}.
 
-handle_data(_Data, State) ->
-    {ok, [], State}.
+handle_data(Data, #state {
+        buffer = Buffer,
+        requests_in = RequestsIn
+    } = State) ->
+
+    Data2 = <<Buffer/binary, Data/binary>>,
+    case pier_protocol:decode(Data2) of
+        {error, not_enough_data} ->
+            {ok, [], State#state {
+                buffer = Data2
+            }};
+        {ok, Response, Buffer2} ->
+            {ok, [{RequestsIn + 1, Response}], State#state {
+                buffer = Buffer2,
+                requests_in = RequestsIn + 1
+            }}
+    end.
 
 -spec terminate(state()) -> ok.
 
 terminate(_State) ->
     ok.
-
-%% private
-request_id(N) ->
-    (N + 1) rem ?MAX_32_BIT_INT.
