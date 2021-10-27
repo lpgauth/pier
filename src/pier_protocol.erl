@@ -11,6 +11,8 @@
     encode/1
 ]).
 
+-define(NL, <<"\r\n">>).
+
 %% public
 -spec decode(binary()) ->
     {ok, term(), binary()} | {error, not_enough_data}.
@@ -26,15 +28,15 @@ encode(List) ->
 
 %% private
 encode_array_bulk_string(List) ->
-    Size = [<<$*>>, integer_to_list(length(List)), <<"\r\n">>],
+    Size = [<<$*>>, integer_to_list(length(List)),?NL],
     Elements = lists:map(fun encode_bulk_string/1, lists:map(fun to_binary/1, List)),
     [Size, Elements].
 
 encode_bulk_string(B) when is_binary(B) ->
-    [<<$$>>, integer_to_list(iolist_size(B)), <<"\r\n">>, B, <<"\r\n">>].
+    [<<$$>>, integer_to_list(iolist_size(B)),?NL, B,?NL].
 
 decode_array(Bin) ->
-    case binary:split(Bin, <<"\r\n">>) of
+    case binary:split(Bin,?NL) of
         [_] ->
             {error, not_enough_data};
         [Size, Rest] ->
@@ -46,7 +48,7 @@ decode_array(Bin) ->
 decode_bulk_string(<<"0\r\n\r\n", Rest/binary>>) ->
     {ok, {ok, undefined}, Rest};
 decode_bulk_string(Bin) ->
-    case binary:split(Bin, <<"\r\n">>) of
+    case binary:split(Bin,?NL) of
         [_] ->
             {error, not_enough_data};
         [Size, Rest] ->
@@ -56,7 +58,7 @@ decode_bulk_string(Bin) ->
                 false ->
                     {error, not_enough_data};
                 true ->
-                    [String, Rest2] = binary:split(Rest, <<"\r\n">>),
+                    [String, Rest2] = binary:split(Rest,?NL),
                     {ok, {ok, String}, Rest2}
             end
     end.
@@ -74,7 +76,7 @@ decode_elements(Bin, N, Acc) ->
     end.
 
 decode_error(Bin) ->
-    case binary:split(Bin, <<"\r\n">>) of
+    case binary:split(Bin,?NL) of
         [_] ->
             {error, not_enough_data};
         [Error, Rest] ->
@@ -82,7 +84,7 @@ decode_error(Bin) ->
     end.
 
 decode_integer(Bin) ->
-    case binary:split(Bin, <<"\r\n">>) of
+    case binary:split(Bin,?NL) of
         [_] ->
             {error, not_enough_data};
         [Integer, Rest] ->
@@ -90,7 +92,7 @@ decode_integer(Bin) ->
     end.
 
 decode_string(Bin) ->
-    case binary:split(Bin, <<"\r\n">>) of
+    case binary:split(Bin,?NL) of
         [_] ->
             {error, not_enough_data};
         [String, Rest] ->

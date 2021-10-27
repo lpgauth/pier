@@ -1,34 +1,54 @@
+% TODO: improve types
+
 -module(pier).
 -include("pier.hrl").
 
 -export([
     query/1,
     query/2,
-    async_query/1
+    async_query/1,
+    async_query/2,
+    async_query/3
 ]).
 
 %% public
--spec query([term()]) ->
+-spec query(list()) ->
     {ok, term()} | {error, atom()}.
 
 query(Query) ->
-    call(Query, ?DEFAULT_TIMEOUT).
+    query(Query, ?DEFAULT_TIMEOUT).
 
--spec query([term()], pos_integer()) ->
+-spec query(list(), pos_integer()) ->
     {ok, term()} | {error, atom()}.
 
 query(Query, Timeout) ->
     call(Query, Timeout).
 
--spec async_query([term()]) ->
+-spec async_query(list()) ->
     {ok, shackle:request_id()} | {error, atom()}.
 
 async_query(Query) ->
-    cast(Query, self(), ?DEFAULT_TIMEOUT).
+    async_query(Query, self(), ?DEFAULT_TIMEOUT).
+
+-spec async_query(list(), pid()) ->
+    {ok, shackle:request_id()} | {error, atom()}.
+
+async_query(Query, Pid) ->
+    async_query(Query, Pid, ?DEFAULT_TIMEOUT).
+
+-spec async_query(list(), pid(), pos_integer()) ->
+    {ok, shackle:request_id()} | {error, atom()}.
+
+async_query(Query, Pid, Timeout) ->
+    cast(Query, Pid, Timeout).
 
 %% private
-call(Request, Timeout) ->
-    shackle:call(?APP, pier_protocol:encode(Request), Timeout).
+call([_Command, Key | _] = Query, Timeout) ->
+    Request = pier_protocol:encode(Query),
+    Pool = pier_cluster:node(Key),
+    shackle:call(Pool, Request, Timeout).
 
-cast(Request, Pid, Timeout) ->
-    shackle:cast(?APP, pier_protocol:encode(Request), Pid, Timeout).
+cast([_Command, Key | _] = Query, Pid, Timeout) ->
+    Request = pier_protocol:encode(Query),
+    Pool = pier_cluster:node(Key),
+    shackle:cast(Pool, Request, Pid, Timeout).
