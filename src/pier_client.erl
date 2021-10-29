@@ -15,6 +15,7 @@
 
 -record(state, {
     buffer       = <<>> :: binary(),
+    pattern             :: binary:cp(),
     requests_in  = 0    :: non_neg_integer(),
     requests_out = 0    :: non_neg_integer()
 }).
@@ -26,7 +27,9 @@
     {ok, state()}.
 
 init(_Opts) ->
-    {ok, #state {}}.
+    {ok, #state {
+        pattern = binary:compile_pattern(<<"\r\n">>)
+    }}.
 
 -spec setup(inet:socket(), state()) ->
     {ok, state()}.
@@ -50,11 +53,12 @@ handle_request(Request, #state {
 
 handle_data(Data, #state {
         buffer = Buffer,
+        pattern = Pattern,
         requests_in = RequestsIn
     } = State) ->
 
     Data2 = <<Buffer/binary, Data/binary>>,
-    case pier_protocol:decode(Data2) of
+    case pier_protocol:decode(Data2, Pattern) of
         {error, not_enough_data} ->
             {ok, [], State#state {
                 buffer = Data2

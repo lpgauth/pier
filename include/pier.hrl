@@ -1,5 +1,6 @@
 %% macros
 -define(APP, pier).
+-define(CHILD(M), {M, {M, start_link, []}, permanent, 5000, worker, [M]}).
 -define(CLIENT, pier_client).
 -define(GET_ENV(Key, Default), application:get_env(?APP, Key, Default)).
 -define(REDIS_CLUSTER_HASH_SLOTS, 16384).
