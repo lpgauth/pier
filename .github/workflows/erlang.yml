@@ -1,0 +1,33 @@
+name: Erlang CI
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        erlang: [25, 26, 27]
+
+    container:
+      image: erlang:${{ matrix.erlang }}
+
+    services:
+      redis:
+        image: redis
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Compile
+      run: make compile
+    - name: Run xref
+      run: make xref
+    - name: Run eunit
+      run: make eunit
+      env:
+        REDIS_HOST: redis
+    - name: Run dialyzer
+      run: make dialyzer

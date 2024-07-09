@@ -1,5 +1,5 @@
 {application, pier, [
-  {applications, [kernel, stdlib, shackle, foil, ecredis_crc16]},
+  {applications, [kernel, stdlib, shackle]},
   {description, "High-Performance Erlang Redis Client"},
   {env, []},
   {licenses, ["MIT"]},

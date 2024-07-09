@@ -5,7 +5,6 @@
 -compile({inline_size, 512}).
 
 -export([
-    decode/1,
     decode/2,
     encode/1
 ]).
@@ -13,17 +12,11 @@
 -define(NL, <<"\r\n">>).
 
 %% public
--spec decode(binary()) ->
-    {ok, term(), binary()} | {error, not_enough_data}.
-
-decode(Bin) ->
-    decode(Bin, binary:compile_pattern(<<"\r\n">>)).
-
 -spec decode(binary(), binary:cp()) ->
     {ok, term(), binary()} | {error, not_enough_data}.
 
-decode(Bin, _Pattern) ->
-    decode_type(Bin).
+decode(Bin, Pattern) ->
+    decode_type(Bin, Pattern).
 
 -spec encode(list()) ->
     iolist().
@@ -40,20 +33,22 @@ encode_array_bulk_string(List) ->
 encode_bulk_string(B) when is_binary(B) ->
     [<<$$>>, integer_to_list(iolist_size(B)), ?NL, B, ?NL].
 
-decode_array(Bin) ->
-    case binary:split(Bin, ?NL) of
+decode_array(Bin, Pattern) ->
+    case binary:split(Bin, Pattern) of
         [_] ->
             {error, not_enough_data};
         [Size, Rest] ->
             % TODO: keep intermediary state
             Size2 = binary_to_integer(Size),
-            decode_elements(Rest, Size2, [])
+            decode_elements(Rest, Size2, Pattern, [])
     end.
 
-decode_bulk_string(<<"0\r\n\r\n", Rest/binary>>) ->
+decode_bulk_string(<<"0\r\n\r\n", Rest/binary>>, _Pattern) ->
+    {ok, {ok, <<"">>}, Rest};
+decode_bulk_string(<<"-1\r\n", Rest/binary>>, _Pattern) ->
     {ok, {ok, undefined}, Rest};
-decode_bulk_string(Bin) ->
-    case binary:split(Bin, ?NL) of
+decode_bulk_string(Bin, Pattern) ->
+    case binary:split(Bin, Pattern) of
         [_] ->
             {error, not_enough_data};
         [Size, Rest] ->
@@ -63,57 +58,57 @@ decode_bulk_string(Bin) ->
                 false ->
                     {error, not_enough_data};
                 true ->
-                    [String, Rest2] = binary:split(Rest, ?NL),
+                    [String, Rest2] = binary:split(Rest, Pattern),
                     {ok, {ok, String}, Rest2}
             end
     end.
 
-decode_elements(Rest, 0, Acc) ->
+decode_elements(Rest, 0, _Pattern, Acc) ->
     {ok, {ok, lists:reverse(Acc)}, Rest};
-decode_elements(<<>>, _N, _Acc) ->
+decode_elements(<<>>, _N, _Pattern, _Acc) ->
     {error, not_enough_data};
-decode_elements(Bin, N, Acc) ->
-    case decode_type(Bin) of
+decode_elements(Bin, N, Pattern, Acc) ->
+    case decode_type(Bin, Pattern) of
         {ok, {ok, Element}, Rest} ->
-            decode_elements(Rest, N - 1, [Element | Acc]);
+            decode_elements(Rest, N - 1, Pattern, [Element | Acc]);
         {error, not_enough_data} ->
             {error, not_enough_data}
     end.
 
-decode_error(Bin) ->
-    case binary:split(Bin, ?NL) of
+decode_error(Bin, Pattern) ->
+    case binary:split(Bin, Pattern) of
         [_] ->
             {error, not_enough_data};
         [Error, Rest] ->
             {ok, {error, Error}, Rest}
     end.
 
-decode_integer(Bin) ->
-    case binary:split(Bin, ?NL) of
+decode_integer(Bin, Pattern) ->
+    case binary:split(Bin, Pattern) of
         [_] ->
             {error, not_enough_data};
         [Integer, Rest] ->
             {ok, {ok, binary_to_integer(Integer)}, Rest}
     end.
 
-decode_string(Bin) ->
-    case binary:split(Bin, ?NL) of
+decode_string(Bin, Pattern) ->
+    case binary:split(Bin, Pattern) of
         [_] ->
             {error, not_enough_data};
         [String, Rest] ->
             {ok, {ok, String}, Rest}
     end.
 
-decode_type(<<"+", Rest/binary>>) ->
-    decode_string(Rest);
-decode_type(<<"-", Rest/binary>>) ->
-    decode_error(Rest);
-decode_type(<<":", Rest/binary>>) ->
-    decode_integer(Rest);
-decode_type(<<"$", Rest/binary>>) ->
-    decode_bulk_string(Rest);
-decode_type(<<"*", Rest/binary>>) ->
-    decode_array(Rest).
+decode_type(<<"+", Rest/binary>>, Pattern) ->
+    decode_string(Rest, Pattern);
+decode_type(<<"-", Rest/binary>>, Pattern) ->
+    decode_error(Rest, Pattern);
+decode_type(<<":", Rest/binary>>, Pattern) ->
+    decode_integer(Rest, Pattern);
+decode_type(<<"$", Rest/binary>>, Pattern) ->
+    decode_bulk_string(Rest, Pattern);
+decode_type(<<"*", Rest/binary>>, Pattern) ->
+    decode_array(Rest, Pattern).
 
 to_binary(X) when is_binary(X) ->
     X;

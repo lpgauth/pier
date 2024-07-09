@@ -4,51 +4,98 @@
 -include("pier.hrl").
 
 -export([
-    query/1,
-    query/2,
-    async_query/1,
-    async_query/2,
-    async_query/3
+    async_command/2,
+    async_command/3,
+    async_command/4,
+    command/2,
+    command/3,
+    pipeline/2,
+    pipeline/3,
+    receive_response/1
 ]).
 
 %% public
--spec query(list()) ->
+-spec async_command(atom(), list()) ->
+    {ok, shackle:request_id()} | {error, atom()}.
+
+async_command(PoolName, Command) ->
+    async_command(PoolName, Command, self()).
+
+-spec async_command(atom(), list(), pid()) ->
+    {ok, shackle:request_id()} | {error, atom()}.
+
+async_command(PoolName, Command, Pid) ->
+    async_command(PoolName, Command, Pid, ?DEFAULT_TIMEOUT).
+
+-spec async_command(atom(), list(), pid(), pos_integer()) ->
+    {ok, shackle:request_id()} | {error, atom()}.
+
+async_command(PoolName, Command, Pid, Timeout) ->
+    cast(PoolName, Command, Pid, Timeout).
+
+-spec command(atom(), list()) ->
     {ok, term()} | {error, atom()}.
 
-query(Query) ->
-    query(Query, ?DEFAULT_TIMEOUT).
+command(PoolName, Command) ->
+    command(PoolName, Command, ?DEFAULT_TIMEOUT).
 
--spec query(list(), pos_integer()) ->
+-spec command(atom(), list(), pos_integer()) ->
     {ok, term()} | {error, atom()}.
 
-query(Query, Timeout) ->
-    call(Query, Timeout).
+command(PoolName, Command, Timeout) ->
+    call(PoolName, Command, Timeout).
 
--spec async_query(list()) ->
-    {ok, shackle:request_id()} | {error, atom()}.
+-spec pipeline(atom(), list()) ->
+    {ok, term()} | {error, atom()}.
 
-async_query(Query) ->
-    async_query(Query, self(), ?DEFAULT_TIMEOUT).
+pipeline(PoolName, Commands) ->
+    pipeline(PoolName, Commands, ?DEFAULT_TIMEOUT).
 
--spec async_query(list(), pid()) ->
-    {ok, shackle:request_id()} | {error, atom()}.
+-spec pipeline(atom(), list(), pos_integer()) ->
+    {ok, term()} | {error, atom()}.
 
-async_query(Query, Pid) ->
-    async_query(Query, Pid, ?DEFAULT_TIMEOUT).
+pipeline(PoolName, Commands, Timeout) ->
+    pipeline_call(PoolName, Commands, Timeout).
 
--spec async_query(list(), pid(), pos_integer()) ->
-    {ok, shackle:request_id()} | {error, atom()}.
+-spec receive_response(shackle:request_id()) ->
+    {ok, term()} | {error, term()}.
 
-async_query(Query, Pid, Timeout) ->
-    cast(Query, Pid, Timeout).
+receive_response(RequestId) ->
+    shackle:receive_response(RequestId).
 
 %% private
-call([_Command, Key | _] = Query, Timeout) ->
-    Request = pier_protocol:encode(Query),
-    Pool = pier_cluster:node(Key),
-    shackle:call(Pool, Request, Timeout).
+call(PoolName, Command, Timeout) ->
+    Request = pier_protocol:encode(Command),
+    shackle:call(PoolName, Request, Timeout).
 
-cast([_Command, Key | _] = Query, Pid, Timeout) ->
-    Request = pier_protocol:encode(Query),
-    Pool = pier_cluster:node(Key),
-    shackle:cast(Pool, Request, Pid, Timeout).
+cast(PoolName, Command, Pid, Timeout) ->
+    Request = pier_protocol:encode(Command),
+    shackle:cast(PoolName, Request, Pid, Timeout).
+
+discard_responses([]) ->
+    ok;
+discard_responses([RequestId | Rest]) ->
+    receive_response(RequestId),
+    discard_responses(Rest).
+
+pipeline_call(PoolName, Commands, Timeout) ->
+    pipeline_call(PoolName, Commands, Timeout, [], []).
+
+pipeline_call(_PoolName, [], _Timeout, [], Responses) ->
+    {ok, Responses};
+pipeline_call(PoolName, [], Timeout, [RequestId | Rest], Responses) ->
+    case receive_response(RequestId) of
+        {ok, Response} ->
+            pipeline_call(PoolName, [], Timeout, Rest, [Response | Responses]);
+        {error, Reason} ->
+            discard_responses(Rest),
+            {error, Reason}
+    end;
+pipeline_call(PoolName, [Command | Rest], Timeout, RequestIds, Responses) ->
+    Request = pier_protocol:encode(Command),
+    case shackle:cast(PoolName, Request, self(), Timeout) of
+        {ok, RequestId} ->
+            pipeline_call(PoolName, Rest, Timeout, [RequestId | RequestIds], Responses);
+        {error, Reason} ->
+            {error, Reason}
+    end.
