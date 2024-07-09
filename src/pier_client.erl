@@ -58,19 +58,26 @@ handle_data(Data, #state {
     } = State) ->
 
     Data2 = <<Buffer/binary, Data/binary>>,
-    case pier_protocol:decode(Data2, Pattern) of
-        {error, not_enough_data} ->
-            {ok, [], State#state {
-                buffer = Data2
-            }};
-        {ok, Response, Buffer2} ->
-            {ok, [{RequestsIn + 1, Response}], State#state {
-                buffer = Buffer2,
-                requests_in = RequestsIn + 1
-            }}
-    end.
+    {ok, Buffer2, RequestsIn2, Replies} = decode_data(Data2, RequestsIn, Pattern, []),
+
+    {ok, Replies, State#state {
+        buffer = Buffer2,
+        requests_in = RequestsIn2
+    }}.
 
 -spec terminate(state()) -> ok.
 
 terminate(_State) ->
     ok.
+
+%% private
+decode_data(<<>>, RequestsIn, _Pattern, Replies) ->
+    {ok, <<>>, RequestsIn, Replies};
+decode_data(Data, RequestsIn, Pattern, Replies) ->
+    case pier_protocol:decode(Data, Pattern) of
+        {ok, Response, Rest} ->
+            Reply = {RequestsIn + 1, Response},
+            decode_data(Rest, RequestsIn + 1, Pattern, [Reply | Replies]);
+        {error, not_enough_data} ->
+            {ok, Data, RequestsIn, Replies}
+    end.

@@ -20,8 +20,4 @@ start_link() ->
 -spec init([]) -> {ok, {{one_for_one, 5, 10}, [supervisor:child_spec()]}}.
 
 init([]) ->
-    pier_cluster:init(),
-
-    {ok, {{one_for_one, 5, 10}, [
-        ?CHILD(pier_cluster_server)
-    ]}}.
+    {ok, {{one_for_one, 5, 10}, []}}.
